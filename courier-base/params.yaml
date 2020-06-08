@@ -1,0 +1,3 @@
+
+num_workers: 5
+workers_speed: 180 # meters / minute
