@@ -3,13 +3,14 @@ from typing import List
 
 import numpy as np
 import simpy
-import yaml
+
+from .utils import get_best_mp
 
 LOGGING_LEVEL = 0
 seed(1)
 np.random.seed(1)
 
-# TODO: find clothest person (+ check when they will freed)
+# TODO: find closest person (+ check when they will freed)
 # TODO: find optimal meeting point? (depend on both positions, fraction(workers/robots), order address)
 
 ### time measuremets in minutes
@@ -29,16 +30,18 @@ class Order_generator:
         self.order_counter = 0
         self.params = params
 
+
     def gen_proc(self):
         """
-        process - generator yieldin new orders given random (bounded) frequency
+        process - generator yielding new orders given random (bounded) frequency
         """
         while True:
-            t = max(np.random.normal(params["orders"]["mean"], params["orders"]["var"]), 0.1)
+            t = max(np.random.normal(self.params["orders"]["mean"], self.params["orders"]["var"]), 0.1)
             yield self.env.timeout(t)
             self.order_counter += 1
             order = Order(self.env, self.order_counter, self.params)
-            self.store.put(order)
+            yield self.store.put(order)
+
             if LOGGING_LEVEL > 1:
                 print("\t Order_generator: orders in queue:", len(self.store.items))
 
@@ -67,14 +70,14 @@ class Order:
 
         while True:
             if LOGGING_LEVEL > 2:
-                print('\t\t Order {id}: order. created at {time}'.format(id=self.id, time=env.now) )
+                print('\t\t Order {id}: order. created at {time:.2f}'.format(id=self.id, time=self.env.now))
             yield self.started
             if LOGGING_LEVEL > 2:
-                print("\t\t Order {id}: order started at {time}".format(id=self.id, time=env.now))
+                print("\t\t Order {id}: order started at {time:.2f}".format(id=self.id, time=self.env.now))
 
             yield self.ended
             if LOGGING_LEVEL > 2:
-                print("\t\t Order {id}: done at {time}".format(id=self.id, time=env.now))
+                print("\t\t Order {id}: done at {time:.2f}".format(id=self.id, time=self.env.now))
             break
 
 
@@ -122,11 +125,10 @@ class Worker:
             yield self.env.timeout(time_to_goal)
             self.pose = np.array([0., 0.])
             if LOGGING_LEVEL > 2:
-                print("\t\tWorker: at home home", env.now)
+                print("\t\tWorker{id}: at home home{time:.2f}")
             self.orders_done += 1
 
 
-    #if working with robots
     def obey_robot(self):
         """
         start new order processing (robot policy) if previous task is done
@@ -134,7 +136,9 @@ class Worker:
         while 1:
             if self.robot is not None:
 
-                print("\t\tWorker: obeying!", env.now)
+                print("\t\tWorker{id}: obeying! order id{order_id} {time:.2f}".format(id=self.id,
+                                                                                      order_id=self.order.id,
+                                                                                      time=self.env.now))
                 self.request = self.resourse.request()
 
                 yield self.go_to_point(self.goal)
@@ -143,7 +147,7 @@ class Worker:
                 self.pose = self.order.address
                 self.order = None
                 self.resourse.release(self.request)
-                print("\t\tWorker: it was pleasure!", env.now)
+                print("\t\tWorker{id}: it was pleasure{time:.2f}!".format(id=self.id, time=self.env.now))
                 self.robot = None
                 self.orders_done += 1
 
@@ -176,7 +180,7 @@ class Monitor:
         while 1:
             yield self.env.timeout(60)
             total = sum([worker.orders_done for worker in self.workers])
-            print("\t Monitor: mean productivity (orders per hour) {prod:.2f}: ".format(prod=total / env.now*60))
+            print("\t Monitor: mean productivity (orders per hour) {prod:.2f}: ".format(prod=total / self.env.now*60))
 
 
 class Robot:
@@ -210,31 +214,33 @@ class Robot:
             order = yield self.order_generator.store.get()
             yield self.env.process(self.find_worker(order))
             # find nearest person
-            # find meeting point
-            # set new goals (for both of them)
+            # find meeting point (done?)
 
     def find_worker(self, order: Order):
         """
         process finding new available persons & meeting with them
         :param order: new order to be delivered
         """
+        yield self.env.timeout(randint(0, 100) / 100)
+        for worker in self.workers:
+            # if worker.resourse.capacity - worker.resourse.count > 0:
+            if worker.robot is None:
+                print("\t\t Robot{id}:new slave (id{slave_id}) found! {time:0.2f}".format(id=self.id, slave_id=worker.id, time=self.env.now))
 
-        while 1:
-            yield self.env.timeout(randint(0, 100) / 100)
-            for worker in self.workers:
-                # if worker.resourse.capacity - worker.resourse.count > 0:
-                if worker.robot is None:
-                    print("\t\t Robot{id}:new slave found! {time}".format(id = self.id, time=self.env.now))
-                    point = (worker.pose + self.pose) / 2
-                    worker.goal = np.array(point)
-                    worker.robot = self
-                    worker.order = order
+                point = get_best_mp(robot_pose=self.pose, worker_pose=worker.pose, delay_robot=0, delay_person=0,
+                                    robot_speed=self.mean_velocity, worker_speed=worker.mean_velocity, max_time=100,
+                                    goal=order.address)
 
-                    yield self.go_to_point(point)
+                worker.goal = np.array(point)
+                worker.robot = self
+                worker.order = order
+                # going to meeting point
+                yield self.go_to_point(point)
 
-                    yield self.go_to_point(np.array([0, 0]))
-                    self.pose = np.array([0, 0])
-                    print("\t\t Robot{id}:done {time}".format(id=self.id, time=self.env.now))
+                # going to base
+                yield self.go_to_point(np.array([0, 0]))
+                self.pose = np.array([0, 0])
+                print("\t\t Robot{id}:done {time:0.2f}".format(id=self.id, time=self.env.now))
 
     def go_to_point(self, meet_point: np.array):
         """
@@ -247,19 +253,26 @@ class Robot:
         return self.env.timeout(time_to_goal)
 
 
+#
 if __name__ == "__main__":
 
-    with open("params.yaml", 'r') as fp:
-        params = yaml.load(fp, Loader=yaml.FullLoader)
+    # with open("../configs/params.yaml", 'r') as fp:
+    #     params = yaml.load(fp, Loader=yaml.FullLoader)
     env = simpy.Environment()
-    gen = Order_generator(env, params)
-    workers = [Worker(env, gen, i, params) for i in range(params["num_workers"])]
-    m = Monitor(env, workers, params)
-    r = [Robot(env, gen, workers, i, params) for i in range(params["num_robots"])]
-
-    # res = simpy.Resource(env, capacity=1)
-    # order = Order(env)
-
-    env.run(until=params["sim_time"])
-
-
+    s = simpy.Store(env, capacity=5)
+    print (len(s.items))
+    s.put(1)
+    print(len(s.items))
+    s.get()
+    print(len(s.items))
+    # gen = Order_generator(env, params)
+    # workers = [Worker(env, gen, i, params) for i in range(params["num_workers"])]
+    # m = Monitor(env, workers, params)
+    # r = [Robot(env, gen, workers, i, params) for i in range(params["num_robots"])]
+    #
+    # # res = simpy.Resource(env, capacity=1)
+    # # order = Order(env)
+    #
+    # env.run(until=params["sim_time"])
+    #
+    #
