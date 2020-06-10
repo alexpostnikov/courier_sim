@@ -13,10 +13,15 @@ np.random.seed(1)
 # TODO: find closest person (+ check when they will freed)
 # TODO: find optimal meeting point? (depend on both positions, fraction(workers/robots), order address)
 
+# простой курьера
+# время доставки
+# кол-во доставок на одного курьера в час
+
 ### time measuremets in minutes
 ### distance measuremets in meters
 
-class Order_generator:
+
+class OrderGenerator:
     """
     generation of orders to be performed
     :param env:  - simpy.Environment
@@ -29,7 +34,6 @@ class Order_generator:
         self.store_gen_proc = self.env.process(self.gen_proc())
         self.order_counter = 0
         self.params = params
-
 
     def gen_proc(self):
         """
@@ -93,12 +97,13 @@ class Worker:
         self.env = env
         self.pose = np.array([0., 0.])
         self.goal = np.array([0., 0.])
-        self.mean_velocity = np.array(params["workers_speed"])  # meters/minute
+        self.mean_velocity = np.array(params["workers_speed"])*60  # meters/minute
 
         self.order_generator = order_generator
-        # self.work_process = env.process (self.take_order())
-        # self.obey_process = env.process(self.obey_robot(None))
-        self.obey_robot_proc = self.env.event()
+        if params["policy"] == "solo":
+            self.work_process = env.process(self.take_order())
+        else:
+            self.obey_robot_proc = self.env.event()
         self.new_work_reactivate = env.event()
         self.orders_done = 0
         self.resourse = simpy.Resource(self.env, capacity=1)
@@ -127,7 +132,6 @@ class Worker:
             if LOGGING_LEVEL > 2:
                 print("\t\tWorker{id}: at home home{time:.2f}")
             self.orders_done += 1
-
 
     def obey_robot(self):
         """
@@ -198,14 +202,13 @@ class Robot:
         self.env = env
         self.pose = np.array([0., 0.])
         self.goal = np.array([0., 0.])
-        self.mean_velocity = np.array(params["robot_speed"])  # meters/minute
+        self.mean_velocity = np.array(params["robot_speed"]) * 60  # meters/minute
 
         self.order_generator = order_generator
         self.work_process = env.process(self.take_order())
         self.orders_done = 0
         self.workers = workers
         self.id = id
-
 
     def take_order(self):
         """ process yielding the new available orders, when the robot is free"""
