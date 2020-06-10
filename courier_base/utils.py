@@ -1,18 +1,30 @@
 import math
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import numpy as np
 
 
-def circles_generator(x0: float, y0: float, velocity: float, max_time: float, delay: float=0):
-
+def circles_generator(x0: float, y0: float, velocity: float, max_time: float, delay: float = 0):
+    """
+        Generator for circles given center, radidus as a function of (velocity, time)
+        :param x0: - x coordinate of center, meters
+        :param y0: - y coordinate of center, meters
+        :param velocity: speed of agent, meters / minute
+        :param max_time: minutes, maximal time of trajectories (number of yielding traj = max_time)
+        :param delay: delay after that agent will accomplish current work, minutes
+        :yield : circle in canonical form
+    """
     for time in np.arange(0, max_time):
         yield x0, y0, max(velocity * (time-delay), 0)
 
 
-def get_intercetions(c0: Tuple[float, float, float], c1: Tuple[float, float, float]):
-    # circle 1: (x0, y0), radius r0
-    # circle 2: (x1, y1), radius r1
+def get_intercetions(c0: Tuple[float, float, float], c1: Tuple[float, float, float])\
+                     -> Optional[List]:
+    """
+    :param c0: x, y, radius of first circle
+    :param c1: x, y, radius of second circle
+    :return: Optional[List[List[x, y], List[x, y]]] - tow points of circles intersections, or None of no intersection
+    """
 
     x0, y0, r0 = c0
     x1, y1, r1 = c1
@@ -43,13 +55,32 @@ def get_intercetions(c0: Tuple[float, float, float], c1: Tuple[float, float, flo
 
 
 def distance_btwn_points(p0: List[float], p1: List[float]) -> float:
+    """
+
+    :param p0: coords of first point: x, y
+    :param p1: coords of second point: x, y
+    :return: l2 norm btwn points
+    """
 
     p0 = np.array(p0)
     p1 = np.array(p1)
     return np.linalg.norm(p0-p1)
 
 
-def get_best_mp(robot_pose: np.ndarray, worker_pose: np.ndarray, delay_robot, delay_person, robot_speed, worker_speed, max_time, goal):
+def get_best_mp(robot_pose: np.ndarray, worker_pose: np.ndarray, delay_robot, delay_person, robot_speed,
+                worker_speed, max_time, goal) -> np.ndarray:
+    """
+
+    :param robot_pose: position of robot: x, y
+    :param worker_pose: position of worker: x, y
+    :param delay_robot: delay after that agent will accomplish current work, minutes
+    :param delay_person: delay after that agent will accomplish current work, minutes
+    :param robot_speed: mean speed of robot
+    :param worker_speed: mean speed of worker
+    :param max_time: minutes, maximal time of trajectories (number of yielding traj = max_time)
+    :param goal: position of goal (order address)
+    :return:  np.ndarray, point of intersection
+    """
 
     if np.linalg.norm(robot_pose-worker_pose) < 0.1:
         return robot_pose
@@ -71,20 +102,7 @@ def get_best_mp(robot_pose: np.ndarray, worker_pose: np.ndarray, delay_robot, de
     for (x, y) in intersections:
         distances.append(distance_btwn_points([x, y], goal))
 
-
     mp = intersections[np.argmin(distances)]
 
-    return mp
+    return np.array(mp)
 
-#
-# if __name__ == "__main__":
-#
-#     robot_pose = [100, 100]
-#     worker_pose = [0, 0]
-#     robot_speed = 5
-#     worker_speed = 6
-#     max_time = 16
-#     goal = [75, 50]
-#
-#     mp = get_best_mp(robot_pose, worker_pose, 0, 0, robot_speed, worker_speed, max_time, goal)
-#     print(mp)
