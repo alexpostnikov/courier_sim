@@ -208,12 +208,17 @@ class Robot:
         self.work_process = env.process(self.take_order())
         self.orders_done = 0
         self.workers = workers
+        self.idle = []
+        self.going_to_worker = []
+        self.going_to_base = []
+        self.idle_start = 0
         self.id = id
 
     def take_order(self):
         """ process yielding the new available orders, when the robot is free"""
 
         while 1:
+            self.idle_start = self.env.now
             order = yield self.order_generator.store.get()
             yield self.env.process(self.find_worker(order))
             # find nearest person
@@ -224,10 +229,12 @@ class Robot:
         process finding new available persons & meeting with them
         :param order: new order to be delivered
         """
-        yield self.env.timeout(randint(0, 100) / 100)
+        yield self.env.timeout(randint(0, 10) / 100)
         for worker in self.workers:
-            # if worker.resourse.capacity - worker.resourse.count > 0:
+
             if worker.robot is None:
+
+                self.idle.append(self.env.now - self.idle_start)
                 print("\t\t Robot{id}:new slave (id{slave_id}) found! {time:0.2f}".format(id=self.id, slave_id=worker.id, time=self.env.now))
 
                 point = get_best_mp(robot_pose=self.pose, worker_pose=worker.pose, delay_robot=0, delay_person=0,
@@ -238,12 +245,15 @@ class Robot:
                 worker.robot = self
                 worker.order = order
                 # going to meeting point
+                self.going_to_worker.append(self.go_to_point(point))
                 yield self.go_to_point(point)
 
                 # going to base
+                self.going_to_base.append(self.go_to_point(np.array([0, 0])))
                 yield self.go_to_point(np.array([0, 0]))
                 self.pose = np.array([0, 0])
                 print("\t\t Robot{id}:done {time:0.2f}".format(id=self.id, time=self.env.now))
+                break
 
     def go_to_point(self, meet_point: np.array):
         """

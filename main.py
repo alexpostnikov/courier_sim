@@ -15,5 +15,7 @@ if __name__ == "__main__":
     if params["policy"] != "solo":
         r = [Robot(env, gen, workers, i, params) for i in range(params["num_robots"])]
     env.run(until=params["sim_time"])
-
-
+    if params["policy"] != "solo":
+        print("ROBOT IDLE TIME:")
+        for robot in r:
+            print("\t", sum(robot.idle))
