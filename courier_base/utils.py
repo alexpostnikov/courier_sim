@@ -41,8 +41,8 @@ def get_intercetions(c0: Tuple[float, float, float], c1: Tuple[float, float, flo
     if d == 0 and r0 == r1:
         return None
     else:
-        a = (r0 ** 2- r1 ** 2 + d ** 2) / (2 * d)
-        h = math.sqrt(r0 ** 2 - a **2)
+        a = (r0 ** 2 - r1 ** 2 + d ** 2) / (2 * d)
+        h = math.sqrt(r0 ** 2 - a ** 2)
         x2 = x0 + a * (x1 - x0) / d
         y2 = y0 + a * (y1 - y0) / d
         x3 = x2 + h * (y1 - y0) / d
