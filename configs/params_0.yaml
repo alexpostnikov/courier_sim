@@ -1,0 +1,11 @@
+
+num_workers: 50
+policy: "obey"
+workers_speed: 1.5 # meters / sec
+num_robots: 30
+robot_speed: 1.5 # meters / sec
+sim_time: 481
+area: [-2000, 2000]  # rectangle, eg if given [-3000, 3000] then area is rectange [(-3000,3000),(3000,3000)]
+orders:
+  mean: 0.1 #mins
+  var: 0.1
