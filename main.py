@@ -34,7 +34,6 @@ def simulate(params: Dict) -> Tuple[float, float, float]:
     for worker in workers:
         worker_idle += sum(worker.idle_time)
 
-
     productivity = m.total_orders_done / env.now * 60
 
     return robot_idle, worker_idle, productivity
@@ -57,11 +56,11 @@ def run():
 
                 # recalculate idle as part of overall time (0.5 = 50% of sim time)
                 robot_idle_precents = robot_idle / params["sim_time"] / params["num_robots"]
-                worker_idle_precents = worker_idle / params["sim_time"] / params["num_workers"]
+                worker_idle_percents = worker_idle / params["sim_time"] / params["num_workers"]
 
                 # save simulation params
                 robot_idle_data.append(robot_idle_precents)
-                workers_idle_data.append(worker_idle_precents)
+                workers_idle_data.append(worker_idle_percents)
                 # save productivity per worker
                 productivity_data.append(productivity / params["num_workers"])
                 num_w_data.append(num_w)
@@ -73,10 +72,10 @@ def run():
         for num_w in [40, 50, 60, 70]:
             params["num_workers"] = num_w
             robot_idle, worker_idle, productivity = simulate(params)
-            worker_idle_precents = worker_idle / params["sim_time"] / params["num_workers"]
+            worker_idle_percents = worker_idle / params["sim_time"] / params["num_workers"]
             productivity_data.append(productivity / params["num_workers"])
             robot_idle_data.append(0)
-            workers_idle_data.append(worker_idle_precents)
+            workers_idle_data.append(worker_idle_percents)
             num_w_data.append(num_w)
             num_r_data.append(0)
 

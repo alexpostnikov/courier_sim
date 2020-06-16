@@ -175,7 +175,7 @@ class Worker:
                 self.orders_done += 1
 
             else:
-                yield self.env.timeout(0.01)
+                yield self.env.timeout(0.5)
                 if self.idle_start is not None:
                     self.idle_time.append(self.env.now - self.idle_start)
                     self.idle_start = None
@@ -259,23 +259,22 @@ class Robot:
         :param order: new order to be delivered
         """
 
-
-        clothest_worker = {"id": None, "distance":99999}
-        while clothest_worker["id"] is None:
+        nearest_worker = {"id": None, "distance": np.inf}
+        while nearest_worker["id"] is None:
 
             for worker in self.workers:
                 if worker.robot is None:
                     distance_to_order = np.linalg.norm(worker.pose - order.address)
-                    if clothest_worker["distance"] > distance_to_order:
-                        clothest_worker["id"] = worker
-                        clothest_worker["distance"] = distance_to_order
-            if clothest_worker["id"] is None:
-                yield self.env.timeout(randint(0, 1) / 10.0)
+                    if nearest_worker["distance"] > distance_to_order:
+                        nearest_worker["id"] = worker
+                        nearest_worker["distance"] = distance_to_order
+            if nearest_worker["id"] is None:
+                yield self.env.timeout(0.5)
 
         # for worker in self.workers:
         #     if worker.robot is None:
 
-        worker = clothest_worker["id"]
+        worker = nearest_worker["id"]
         self.idle.append(self.env.now - self.idle_start)
         self.idle_start = None
         if LOGGING_LEVEL > 1:
