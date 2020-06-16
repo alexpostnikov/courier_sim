@@ -102,8 +102,9 @@ class Worker:
         if params["policy"] == "solo":
             self.work_process = env.process(self.take_order())
         else:
-            self.obey_robot_proc = self.env.event()
-            self.obey_proc = self.env.process(self.obey_robot())
+            # self.obey_robot_proc = self.env.event()
+            # self.obey_proc = self.env.process(self.obey_robot())
+            self.obey_proc = self.env.process(self.work())
         self.new_work_reactivate = env.event()
         self.orders_done = 0
         self.resourse = simpy.Resource(self.env, capacity=1)
@@ -116,6 +117,9 @@ class Worker:
         self.walking_to_take_order_time = []
         self.walking_to_order_address_time = []
         self.idle_start = 0
+        self.order_list = []
+        self.busy_until = self.env.now
+        self.end_pose = self.pose
 
     # if working without robots
     def take_order(self):
@@ -191,6 +195,44 @@ class Worker:
         return self.env.timeout(time_to_goal)
 
 
+    def try_new_order(self, order, robot):
+        delay = max(self.busy_until - self.env.now, 0)
+        mp = get_best_mp(robot_pose=robot.pose, worker_pose=self.pose, delay_robot=0, delay_person=delay,
+                    robot_speed=robot.mean_velocity, worker_speed=self.mean_velocity, max_time=100,
+                    goal=order.address)
+        if mp is None:
+            return np.inf, None
+        time_to_mp = np.linalg.norm(self.end_pose - mp) / self.mean_velocity
+        time_to_order = np.linalg.norm(mp - order.address) / self.mean_velocity
+        return max(self.busy_until, self.env.now) + time_to_mp+time_to_order, mp
+
+    def add_new_order(self, robot, order, mp, new_busy_until):
+        self.order_list.append({"order": order, "mp": mp, "robot": robot})
+        self.busy_until = new_busy_until
+        self.end_pose = order.address
+
+    def work(self):
+        while 1:
+            if len(self.order_list) == 0:
+                yield self.env.timeout(0.5)
+                self.idle_time.append(0.5)
+            else:
+                task = self.order_list.pop(0)
+                time_to_mp = np.linalg.norm(self.pose - task["mp"]) / self.mean_velocity
+                self.walking_to_take_order_time.append(time_to_mp)
+                yield self.env.timeout(time_to_mp)
+                self.pose = task["mp"]
+
+                time_to_order = np.linalg.norm(self.pose - task["order"].address) / self.mean_velocity
+                yield self.env.timeout(time_to_order)
+                self.pose = task["order"].address
+                self.orders_done += 1
+
+
+
+
+
+
 class Monitor:
     """
     monitoring current state
@@ -247,11 +289,44 @@ class Robot:
         while 1:
             self.idle_start = self.env.now
             order = yield self.order_generator.store.get()
-            yield self.env.process(self.find_worker(order))
+            # yield self.env.process(self.find_worker(order))
+            yield self.env.process(self.find_smart_worker(order))
             if self.idle_start is not None:
                 self.idle.append(self.env.now - self.idle_start)
             # find nearest person
             # find meeting point (done?)
+
+    def find_smart_worker(self, order: Order):
+        nearest_worker = {"id": None, "time": np.inf, "mp": None}
+        while nearest_worker["id"] is None:
+
+            for worker in self.workers:
+                if worker.busy_until - self.env.now > 20:
+                    continue
+                order_done_time, mp = worker.try_new_order(order, self)
+                if order_done_time - worker.busy_until > 30:
+                    continue
+
+                if order_done_time < nearest_worker["time"]:
+                    nearest_worker["id"] = worker
+                    nearest_worker["time"] = order_done_time
+                    nearest_worker["mp"] = mp
+
+            if nearest_worker["id"] is None:
+
+                yield self.env.timeout(2)
+
+
+        worker = nearest_worker["id"]
+        worker.add_new_order(robot=self, order=order, mp=nearest_worker["mp"],
+                             new_busy_until=nearest_worker["time"])
+        yield self.go_to_point(nearest_worker["mp"])
+        self.pose = nearest_worker["mp"]
+        yield self.go_to_point(np.array([0., 0]))
+        self.pose = np.array([0., 0])
+
+
+
 
     def find_worker(self, order: Order):
         """

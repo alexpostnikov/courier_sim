@@ -92,11 +92,13 @@ def get_best_mp(robot_pose: np.ndarray, worker_pose: np.ndarray, delay_robot, de
 
     intersections = list(filter(None, intersections))
 
-    assert len(intersections) > 0, "No intersections Found! {robot_pose}, {worker_pose}, {delay_robot}," \
-                                   " {delay_person}, {robot_speed}, {worker_speed}, {max_time}, {goal}".format(
-                                    robot_pose=robot_pose, worker_pose=worker_pose, delay_robot=delay_robot,
-                                    delay_person=delay_person, robot_speed=robot_speed, worker_speed=worker_speed,
-                                    max_time=max_time, goal=goal)
+    if  (len(intersections) == 0):
+        # print("No intersections Found! {robot_pose}, {worker_pose}, {delay_robot},{delay_person}, {robot_speed},"
+        #        " {worker_speed}, {max_time}, {goal}".format(
+        #                             robot_pose=robot_pose, worker_pose=worker_pose, delay_robot=delay_robot,
+        #                             delay_person=delay_person, robot_speed=robot_speed, worker_speed=worker_speed,
+        #                             max_time=max_time, goal=goal))
+        return None
     intersections = [item for sublist in intersections for item in sublist]
     distances = []
     for (x, y) in intersections:
