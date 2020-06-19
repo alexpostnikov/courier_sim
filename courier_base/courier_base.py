@@ -92,7 +92,7 @@ class Worker:
     :param params: dict of params from yaml configuration file
     """
 
-    def __init__(self, env: simpy.Environment, order_generator, id:int, params: dict):
+    def __init__(self, env: simpy.Environment, order_generator, id: int, params: dict):
         self.env = env
         self.pose = np.array([0., 0.])
         self.goal = np.array([0., 0.])
@@ -194,17 +194,17 @@ class Worker:
         time_to_goal = np.linalg.norm(self.goal - self.pose) / self.mean_velocity
         return self.env.timeout(time_to_goal)
 
-
     def try_new_order(self, order, robot):
+
         delay = max(self.busy_until - self.env.now, 0)
         mp = get_best_mp(robot_pose=robot.pose, worker_pose=self.pose, delay_robot=0, delay_person=delay,
-                    robot_speed=robot.mean_velocity, worker_speed=self.mean_velocity, max_time=100,
-                    goal=order.address)
+                         robot_speed=robot.mean_velocity, worker_speed=self.mean_velocity, max_time=100,
+                         goal=order.address)
         if mp is None:
             return np.inf, None
         time_to_mp = np.linalg.norm(self.end_pose - mp) / self.mean_velocity
         time_to_order = np.linalg.norm(mp - order.address) / self.mean_velocity
-        return max(self.busy_until, self.env.now) + time_to_mp+time_to_order, mp
+        return max(self.busy_until, self.env.now) + time_to_mp + time_to_order, mp
 
     def add_new_order(self, robot, order, mp, new_busy_until):
         self.order_list.append({"order": order, "mp": mp, "robot": robot})
@@ -212,10 +212,16 @@ class Worker:
         self.end_pose = order.address
 
     def work(self):
+        yield self.env.timeout(0.1)
         while 1:
             if len(self.order_list) == 0:
-                yield self.env.timeout(0.5)
-                self.idle_time.append(0.5)
+                # print("\t worker{id} not doing anything, order len {len}, en".format(id=self.id,
+                #len=len(self.order_list)))
+                timeout = 1
+                # if np.linalg.norm(self.pose - np.array([0, 0]) > 400):
+                #     self.pose = self.pose + (-self.pose) /np.linalg.norm(self.pose) * self.mean_velocity * timeout
+                yield self.env.timeout(timeout)
+                self.idle_time.append(timeout)
             else:
                 task = self.order_list.pop(0)
                 time_to_mp = np.linalg.norm(self.pose - task["mp"]) / self.mean_velocity
@@ -227,8 +233,6 @@ class Worker:
                 yield self.env.timeout(time_to_order)
                 self.pose = task["order"].address
                 self.orders_done += 1
-
-
 
 
 
@@ -254,7 +258,6 @@ class Monitor:
     def total_orders_done(self):
         total = sum([worker.orders_done for worker in self.workers])
         return total
-
 
 class Robot:
 
@@ -282,58 +285,72 @@ class Robot:
         self.going_to_base = []
         self.idle_start = 0
         self.id = id
+        self.params = params
 
     def take_order(self):
         """ process yielding the new available orders, when the robot is free"""
 
         while 1:
-            self.idle_start = self.env.now
+            # self.idle_start = self.env.now
             order = yield self.order_generator.store.get()
             # yield self.env.process(self.find_worker(order))
             yield self.env.process(self.find_smart_worker(order))
-            if self.idle_start is not None:
-                self.idle.append(self.env.now - self.idle_start)
+            # if self.idle_start is not None:
+
             # find nearest person
             # find meeting point (done?)
 
     def find_smart_worker(self, order: Order):
+        """
+
+        :param order: object of order class, used to calc distance and find meeting point (mp)
+        :yield: timeout
+        """
         nearest_worker = {"id": None, "time": np.inf, "mp": None}
         while nearest_worker["id"] is None:
-
+            counter = 0
             for worker in self.workers:
-                if worker.busy_until - self.env.now > 20:
+                if worker.busy_until - self.env.now > 10:
                     continue
+                counter += 1
                 order_done_time, mp = worker.try_new_order(order, self)
-                if order_done_time - worker.busy_until > 30:
-                    continue
 
                 if order_done_time < nearest_worker["time"]:
                     nearest_worker["id"] = worker
                     nearest_worker["time"] = order_done_time
                     nearest_worker["mp"] = mp
 
-            if nearest_worker["id"] is None:
+            if nearest_worker["id"] is None or counter < self.params["num_workers"]/8:
 
+                nearest_worker = {"id": None, "time": np.inf, "mp": None}
+                self.idle.append(2)
                 yield self.env.timeout(2)
+                self.idle_start = self.env.now
 
-
+        initial_distance = np.linalg.norm(worker.pose - order.address)
+        mp_distance = np.linalg.norm(nearest_worker["mp"] - order.address)
+        if mp_distance > 3000:
+            print("mp_distance {mp_distance}, initial_distance {initial_distance}".format(
+                initial_distance=initial_distance, mp_distance=mp_distance))
         worker = nearest_worker["id"]
         worker.add_new_order(robot=self, order=order, mp=nearest_worker["mp"],
                              new_busy_until=nearest_worker["time"])
+
         yield self.go_to_point(nearest_worker["mp"])
+
         self.pose = nearest_worker["mp"]
+
         yield self.go_to_point(np.array([0., 0]))
+
         self.pose = np.array([0., 0])
-
-
-
+        nearest_worker = {"id": None, "time": np.inf, "mp": None}
+        self.idle_start = self.env.now
 
     def find_worker(self, order: Order):
         """
         process finding new available persons & meeting with them
         :param order: new order to be delivered
         """
-
         nearest_worker = {"id": None, "distance": np.inf}
         while nearest_worker["id"] is None:
 
@@ -353,7 +370,8 @@ class Robot:
         self.idle.append(self.env.now - self.idle_start)
         self.idle_start = None
         if LOGGING_LEVEL > 1:
-            print("\t\t Robot{id}:new slave (id{slave_id}) found! {time:0.2f}".format(id=self.id, slave_id=worker.id, time=self.env.now))
+            print("\t\t Robot{id}:new slave (id{slave_id}) found! {time:0.2f}".format(id=self.id, slave_id=worker.id,
+                                                                                      time=self.env.now))
 
         point = get_best_mp(robot_pose=self.pose, worker_pose=worker.pose, delay_robot=0, delay_person=0,
                             robot_speed=self.mean_velocity, worker_speed=worker.mean_velocity, max_time=100,

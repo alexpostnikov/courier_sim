@@ -14,7 +14,7 @@ def circles_generator(x0: float, y0: float, velocity: float, max_time: float, de
         :param delay: delay after that agent will accomplish current work, minutes
         :yield : circle in canonical form
     """
-    for time in np.arange(0, max_time):
+    for time in np.arange(0, max_time, 1):
         yield x0, y0, max(velocity * (time-delay), 0)
 
 
@@ -42,7 +42,9 @@ def get_intercetions(c0: Tuple[float, float, float], c1: Tuple[float, float, flo
         return None
     else:
         a = (r0 ** 2 - r1 ** 2 + d ** 2) / (2 * d)
-        h = math.sqrt(r0 ** 2 - a ** 2)
+
+        h = math.sqrt(r0 ** 2 - a ** 2+0.01)
+
         x2 = x0 + a * (x1 - x0) / d
         y2 = y0 + a * (y1 - y0) / d
         x3 = x2 + h * (y1 - y0) / d
@@ -104,7 +106,14 @@ def get_best_mp(robot_pose: np.ndarray, worker_pose: np.ndarray, delay_robot, de
     for (x, y) in intersections:
         distances.append(distance_btwn_points([x, y], goal))
 
+
     mp = intersections[np.argmin(distances)]
+    initial_distance = np.linalg.norm(worker_pose - goal)
+    mp_distance = np.linalg.norm(mp - goal)
+
+
+    # if (initial_distance < mp_distance):
+    #     print("initial_distance {initial_distance}, mp_distance {mp_distance}".format(mp_distance=mp_distance, initial_distance=initial_distance))
 
     return np.array(mp)
 

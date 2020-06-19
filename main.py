@@ -1,11 +1,24 @@
 from typing import Dict, Tuple
 
 import simpy
+import numpy as np
 import yaml
 
 from courier_base.courier_base import Robot, OrderGenerator, Worker, Monitor
 from plotting.plot_utils import plotly_plot
 
+
+def save_sim_data(num_r_data, num_w_data, robot_idle_data, workers_idle_data, productivity_data, prefix: str = ""):
+    num_r_data_np = np.array(num_r_data)
+    num_w_data_np = np.array(num_w_data)
+    robot_idle_data_np = np.array(robot_idle_data)
+    workers_idle_data_np = np.array(workers_idle_data)
+    productivity_data_np = np.array(productivity_data)
+    np.save('./data/'+prefix+'num_r_data_np.npz', num_r_data_np)
+    np.save('./data/'+prefix+'num_w_data_np.npz', num_w_data_np)
+    np.save('./data/'+prefix+'robot_idle_data_np.npz', robot_idle_data_np)
+    np.save('./data/'+prefix+'workers_idle_data_np.npz', workers_idle_data_np)
+    np.save('./data/'+prefix+'productivity_data_np.npz', productivity_data_np)
 
 def simulate(params: Dict) -> Tuple[float, float, float]:
     """
@@ -48,10 +61,13 @@ def run():
 
     with open("./configs/params_0.yaml", 'r') as fp:
         params = yaml.load(fp, Loader=yaml.FullLoader)
-        for num_r in [20, 30, 40, 50]:
-            for num_w in [40, 50, 60, 70, 80]:
-                params["num_workers"] = num_w
-                params["num_robots"] = num_r
+        robot_range = np.arange(20, 60.1, 10)
+        worker_range = np.arange(20, 60.1, 10)
+        for num_r in robot_range:
+            for num_w in worker_range:
+                print ("new sim num_r={num_r}, num_w={num_w}".format(num_r=num_r, num_w=num_w))
+                params["num_workers"] = int(num_w)
+                params["num_robots"] = int(num_r)
                 robot_idle, worker_idle, productivity = simulate(params)
 
                 # recalculate idle as part of overall time (0.5 = 50% of sim time)
@@ -69,7 +85,7 @@ def run():
     # SOLO
     with open("./configs/params_solo.yaml", 'r') as fp:
         params = yaml.load(fp, Loader=yaml.FullLoader)
-        for num_w in [40, 50, 60, 70]:
+        for num_w in [40, 50]:  #, 60, 70]:
             params["num_workers"] = num_w
             robot_idle, worker_idle, productivity = simulate(params)
             worker_idle_percents = worker_idle / params["sim_time"] / params["num_workers"]
@@ -82,6 +98,7 @@ def run():
         print("solo productivity: {productivity}:0.2f, num workers: {workers}".format(productivity=productivity,
                                                                                       workers=params["num_workers"]))
 
+    save_sim_data(num_r_data, num_w_data, robot_idle_data, workers_idle_data, productivity_data, prefix="order_list_")
     fig, fig2 = plotly_plot(num_r_data, num_w_data, robot_idle_data, workers_idle_data, productivity_data)
     fig.show()
     fig2.show()
