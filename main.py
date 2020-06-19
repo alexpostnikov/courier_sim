@@ -48,8 +48,8 @@ def run():
 
     with open("./configs/params_0.yaml", 'r') as fp:
         params = yaml.load(fp, Loader=yaml.FullLoader)
-        for num_r in [20, 30, 40, 50]:
-            for num_w in [40, 50, 60, 70, 80]:
+        for num_r in [10, 20, 30, 40, 50]:
+            for num_w in [20, 30, 40]:
                 params["num_workers"] = num_w
                 params["num_robots"] = num_r
                 robot_idle, worker_idle, productivity = simulate(params)
