@@ -112,9 +112,10 @@ class Worker:
         self.robot = None
         self.order = None
         self.id = id
-        self.idle_time = []
-        self.walking_to_take_order_time = []
-        self.walking_to_order_address_time = []
+        self.timings = {"idle_time": [], "walking_to_take_order_time": [], "walking_to_order_address_time": []}
+        # self.idle_time = []
+        # self.walking_to_take_order_time = []
+        # self.walking_to_order_address_time = []
         self.idle_start = 0
 
     # if working without robots
@@ -126,17 +127,17 @@ class Worker:
             # Wait for order to be created
             self.idle_start = self.env.now
             order = yield self.order_generator.store.get()
-            self.idle_time.append(self.env.now - self.idle_start)
+            self.timings["idle_time"].append(self.env.now - self.idle_start)
 
             # Go to order address
             self.goal = order.address
             time_to_goal = np.linalg.norm(self.goal-self.pose) / self.mean_velocity
-            self.walking_to_take_order_time.append(time_to_goal)
+            self.timings["walking_to_take_order_time"].append(time_to_goal)
             yield self.env.timeout(time_to_goal)
 
             self.pose = self.goal
             order.ended.succeed()
-            self.walking_to_order_address_time.append(time_to_goal)
+            self.timings["walking_to_order_address_time"].append(time_to_goal)
 
             # Go back to base
             yield self.env.timeout(time_to_goal)
@@ -152,7 +153,7 @@ class Worker:
         while 1:
             self.idle_start = self.env.now
             if self.robot is not None:
-                self.idle_time.append(self.env.now - self.idle_start)
+                self.timings["idle_time"].append(self.env.now - self.idle_start)
                 self.idle_start = None
                 if LOGGING_LEVEL > 1:
                     print("\t\tWorker{id}: obeying! order id{order_id} {time:.2f}".format(id=self.id,
@@ -160,11 +161,11 @@ class Worker:
                                                                                       time=self.env.now))
                 self.request = self.resourse.request()
 
-                self.walking_to_take_order_time.append(self.go_to_point(self.goal))
+                self.timings["walking_to_take_order_time"].append(self.go_to_point(self.goal))
                 yield self.go_to_point(self.goal)
 
                 self.pose = self.goal
-                self.walking_to_order_address_time.append(self.go_to_point(self.order.address))
+                self.timings["walking_to_order_address_time"].append(self.go_to_point(self.order.address))
                 yield self.go_to_point(self.order.address)
                 self.pose = self.order.address
                 self.order = None
@@ -177,7 +178,7 @@ class Worker:
             else:
                 yield self.env.timeout(0.5)
                 if self.idle_start is not None:
-                    self.idle_time.append(self.env.now - self.idle_start)
+                    self.timings["idle_time"].append(self.env.now - self.idle_start)
                     self.idle_start = None
 
     def go_to_point(self, meet_point: np.array):
@@ -215,7 +216,6 @@ class Monitor:
 
 
 class Robot:
-
     """
         The person (worker) that bring orders to customer
         :param env - simpy.Environment
@@ -235,9 +235,7 @@ class Robot:
         self.work_process = env.process(self.take_order())
         self.orders_done = 0
         self.workers = workers
-        self.idle = []
-        self.going_to_worker = []
-        self.going_to_base = []
+        self.timings = {"idle": [], "going_to_worker": [], "going_to_base": []}
         self.idle_start = 0
         self.id = id
 
@@ -249,7 +247,7 @@ class Robot:
             order = yield self.order_generator.store.get()
             yield self.env.process(self.find_worker(order))
             if self.idle_start is not None:
-                self.idle.append(self.env.now - self.idle_start)
+                self.timings["idle"].append(self.env.now - self.idle_start)
             # find nearest person
             # find meeting point (done?)
 
@@ -275,7 +273,7 @@ class Robot:
         #     if worker.robot is None:
 
         worker = nearest_worker["id"]
-        self.idle.append(self.env.now - self.idle_start)
+        self.timings["idle"].append(self.env.now - self.idle_start)
         self.idle_start = None
         if LOGGING_LEVEL > 1:
             print("\t\t Robot{id}:new slave (id{slave_id}) found! {time:0.2f}".format(id=self.id, slave_id=worker.id, time=self.env.now))
@@ -288,11 +286,11 @@ class Robot:
         worker.robot = self
         worker.order = order
         # going to meeting point
-        self.going_to_worker.append(self.go_to_point(point))
+        self.timings["going_to_worker"].append(self.go_to_point(point))
         yield self.go_to_point(point)
 
         # going to base
-        self.going_to_base.append(self.go_to_point(np.array([0, 0])))
+        self.timings["going_to_base"].append(self.go_to_point(np.array([0, 0])))
         yield self.go_to_point(np.array([0, 0]))
 
         self.pose = np.array([0, 0])

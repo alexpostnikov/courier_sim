@@ -27,12 +27,12 @@ def simulate(params: Dict) -> Tuple[float, float, float]:
 
         for robot in r:
             if robot.idle_start is not None:
-                robot.idle.append(env.now - robot.idle_start)
-            robot_idle += sum(robot.idle)
+                robot.timings["idle"].append(env.now - robot.idle_start)
+            robot_idle += sum(robot.timings["idle"])
 
     worker_idle = 0
     for worker in workers:
-        worker_idle += sum(worker.idle_time)
+        worker_idle += sum(worker.timings["idle_time"])
 
     productivity = m.total_orders_done / env.now * 60
 
@@ -40,12 +40,19 @@ def simulate(params: Dict) -> Tuple[float, float, float]:
 
 
 def run():
+    """
+    Main simulation function
+    :return:
+    """
+
+    # lists for saving simulation data
     productivity_data = []
     robot_idle_data = []
     workers_idle_data = []
     num_w_data = []
     num_r_data = []
 
+    # take params from yaml, and simulate for specified at num_r & num_w number of workers and robots setup
     with open("./configs/params_0.yaml", 'r') as fp:
         params = yaml.load(fp, Loader=yaml.FullLoader)
         for num_r in [10, 20, 30, 40, 50]:
@@ -66,7 +73,7 @@ def run():
                 num_w_data.append(num_w)
                 num_r_data.append(num_r)
 
-    # SOLO
+    # calculate productivity for ONLY workers
     with open("./configs/params_solo.yaml", 'r') as fp:
         params = yaml.load(fp, Loader=yaml.FullLoader)
         for num_w in [40, 50, 60, 70]:
@@ -82,6 +89,7 @@ def run():
         print("solo productivity: {productivity}:0.2f, num workers: {workers}".format(productivity=productivity,
                                                                                       workers=params["num_workers"]))
 
+    # create plots in browser
     fig, fig2 = plotly_plot(num_r_data, num_w_data, robot_idle_data, workers_idle_data, productivity_data)
     fig.show()
     fig2.show()
